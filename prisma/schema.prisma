@@ -1,0 +1,102 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Customer {
+  id            String         @id @default(cuid())
+  externalId    String?        @unique
+  name          String
+  email         String         @unique
+  phone         String?
+  riskScore     Float?         @default(0.0)
+  status        String         @default("ACTIVE") // ACTIVE, AT_RISK, CHURNED, SUSPENDED
+  lifetimeValue Float          @default(0.0)
+  currency      String         @default("USD")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  transactions  Transaction[]
+  recoveryCases RecoveryCase[]
+  auditLogs     AuditLog[]
+}
+
+model Transaction {
+  id              String        @id @default(cuid())
+  txnRef          String?       @unique // Human-readable ID e.g. TXN-10061
+  customerId      String
+  customer        Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  amount          Float
+  currency        String        @default("USD")
+  transactionType String?       // FAILED_PAYMENT, CHECKOUT_ABANDONMENT, FAILED_SUBSCRIPTION, OVERDUE_INVOICE
+  status          String        // FAILED, SUCCEEDED, PENDING, REFUNDED
+  paymentMethod   String?       // CREDIT_CARD, DEBIT_CARD, UPI, ACH, BANK_TRANSFER, PAYPAL
+  paymentGateway  String?       // STRIPE, PADDLE, ADYEN, BRAINTREE
+  failureReason   String?
+  failureCode     String?
+  transactionDate DateTime      @default(now())
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  recoveryCase    RecoveryCase?
+  auditLogs       AuditLog[]
+}
+
+model RecoveryCase {
+  id              String           @id @default(cuid())
+  caseRef         String?          @unique // Human-readable ID e.g. CASE-10061
+  customerId      String
+  customer        Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  transactionId   String           @unique
+  transaction     Transaction      @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  status          String           @default("OPEN") // OPEN, IN_PROGRESS, RECOVERED, FAILED, ESCALATED, CLOSED
+  priority        String           @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
+  recoveredAmount Float            @default(0.0)
+  attemptsCount   Int              @default(0)
+  nextRetryAt     DateTime?
+  resolvedAt      DateTime?
+  notes           String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  actions         RecoveryAction[]
+  auditLogs       AuditLog[]
+}
+
+model RecoveryAction {
+  id             String       @id @default(cuid())
+  recoveryCaseId String
+  recoveryCase   RecoveryCase @relation(fields: [recoveryCaseId], references: [id], onDelete: Cascade)
+  actionType     String
+  channel        String?
+  status         String       @default("PENDING")
+  scheduledAt    DateTime?
+  executedAt     DateTime?
+  result         String?
+  metadata       String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model AuditLog {
+  id              String        @id @default(cuid())
+  entityType      String
+  entityId        String
+  action          String
+  actor           String        @default("SYSTEM")
+  details         String?
+  customerId      String?
+  customer        Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  recoveryCaseId  String?
+  recoveryCase    RecoveryCase? @relation(fields: [recoveryCaseId], references: [id], onDelete: SetNull)
+  transactionId   String?
+  transaction     Transaction?  @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  createdAt       DateTime      @default(now())
+}
